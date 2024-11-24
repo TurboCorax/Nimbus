@@ -19,3 +19,8 @@ members = [
 [[example]]
 name = "bevy_egui_scaling"
 path = "examples/bevy_basic/bevy_egui_scaling.rs"
+
+# Trigger low power mod (for desktop app)
+[[example]]
+name = "bevy_low_power_mode"
+path = "examples/bevy_basic/bevy_low_power_mode.rs"
