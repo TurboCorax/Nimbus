@@ -10,7 +10,6 @@ bevy_egui = "0.30.1"
 [workspace]
 resolver = "2"
 members = [
-    "nim_schematic",
     "nim_spice",
     "nim_ui",
 ]
