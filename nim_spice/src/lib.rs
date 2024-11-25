@@ -1,8 +1,10 @@
 mod parser;
-mod token_type;
+mod token;
 mod error;
 mod command;
 mod simulator;
+mod lexer;
+mod component;
 
 pub fn add(left: u64, right: u64) -> u64 {
     left + right

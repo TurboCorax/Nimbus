@@ -46,8 +46,9 @@ impl Display for Error {
     }
 }
 
+#[derive(Debug)]
 pub struct ErrorHandler {
-    errors: Vec<Error>,
+    pub(crate) errors: Vec<Error>,
 }
 
 impl ErrorHandler {
