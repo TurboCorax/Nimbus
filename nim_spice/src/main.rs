@@ -1,8 +1,5 @@
 use bevy::DefaultPlugins;
-use bevy::{
-    prelude::*,
-    winit::WinitSettings,
-};
+use bevy::{prelude::*, winit::WinitSettings};
 use bevy_egui::EguiPlugin;
 
 fn main() {

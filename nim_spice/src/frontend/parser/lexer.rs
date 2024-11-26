@@ -1,5 +1,6 @@
-use crate::error::{Error, ErrorHandler, ErrorType};
-use crate::token::{Token, TokenType};
+use crate::frontend::parser::token::TokenType::*;
+use crate::frontend::parser::token::{Token, TokenType};
+use crate::utils::error::{Error, ErrorHandler, ErrorType};
 
 pub struct Lexer {
     content: String,
@@ -42,7 +43,14 @@ impl Lexer {
     pub(crate) fn scan_tokens(mut self) -> Result<Vec<Token>, ErrorHandler> {
         while !self.is_eof() {
             self.scan_token();
-            if self.tokens.last().unwrap().token_type == TokenType::End {
+            // if self.tokens.last().unwrap().token_type == TokenType::End {
+            //     break;
+            // }
+            if let Some(Token {
+                token_type: TokenType::End,
+                ..
+            }) = self.tokens.last()
+            {
                 break;
             }
         }
@@ -109,12 +117,11 @@ impl Lexer {
 
     fn add_token(&mut self, token_type: TokenType, content: String) {
         let token: Token = Token::new(token_type, self.line, self.column, content);
-        dbg!(&token);
         self.tokens.push(token);
     }
 
     fn is_digit(&self, c: char) -> bool {
-        c.is_digit(10)
+        c.is_ascii_digit()
     }
 
     fn is_alpha(&self, c: char) -> bool {
@@ -132,23 +139,21 @@ impl Lexer {
     // Read an integer or a float number
     // TODO: Support numbers like 6K34
     fn number(&mut self) {
+        let consume_simple_number = |lexer: &mut Lexer| {
+            while let Some(c) = lexer.peek() {
+                if !lexer.is_digit(c) {
+                    break;
+                }
+                lexer.advance();
+            }
+        };
         self.start = self.current;
 
-        while let Some(c) = self.peek() {
-            if !self.is_digit(c) {
-                break;
-            }
-            self.advance();
-        }
+        consume_simple_number(self);
 
         if self.peek() == Some('.') && self.is_digit(self.peek_next()) {
             self.advance();
-            while let Some(c) = self.peek() {
-                if !self.is_digit(c) {
-                    break;
-                }
-                self.advance();
-            }
+            consume_simple_number(self);
         }
 
         self.add_token(
@@ -158,27 +163,30 @@ impl Lexer {
 
         // if next !=e/E, then it is a unit
         if let Some(c) = self.peek() {
-            if self.is_alpha(c) && !(self.peek() != Some('e') && self.peek() != Some('E')) {
-                return;
+            if self.is_alpha(c) && self.peek() == Some('e') && self.peek() == Some('E') {
+                self.advance();
+                self.add_token(TokenType::E, "E".to_string());
+
+                match self.peek() {
+                    Some('-') => {
+                        self.advance();
+                        self.add_token(TokenType::Minus, "-".to_string());
+                    }
+                    Some('+') => {
+                        self.advance();
+                        self.add_token(TokenType::Add, "+".to_string());
+                    }
+                    _ => {}
+                }
+                // read the exponent
+                consume_simple_number(self);
+
+                self.add_token(
+                    TokenType::Number,
+                    self.content[self.start - 1..self.current].to_string(),
+                );
             }
-            self.unit();
         }
-    }
-
-    fn unit(&mut self) {
-        self.start = self.current;
-
-        while let Some(c) = self.peek() {
-            if !self.is_alphanumeric(c) {
-                break;
-            }
-            self.advance();
-        }
-
-        self.add_token(
-            TokenType::Unit,
-            self.content[self.start..self.current].to_string(),
-        );
     }
 
     fn identifier(&mut self) {
@@ -196,9 +204,9 @@ impl Lexer {
             "E" | "e" => {
                 // if E/e is just after a number, then it is an exponent
                 if let Some(Token {
-                                token_type: TokenType::Number,
-                                ..
-                            }) = self.last_token()
+                    token_type: TokenType::Number,
+                    ..
+                }) = self.last_token()
                 {
                     let last = self.last(2);
                     if last.is_some() && last.unwrap().is_digit(10) {
@@ -210,6 +218,7 @@ impl Lexer {
             _ => {}
         }
 
+        // Read the rest of the string
         while let Some(c) = self.peek() {
             if !self.is_alphanumeric(c) {
                 break;
@@ -217,12 +226,8 @@ impl Lexer {
             self.advance();
         }
 
-        let token_type = match self.last(1) {
-            Some(c) if self.is_digit(c) => TokenType::Unit,
-            _ => TokenType::Identifier,
-        };
         self.add_token(
-            token_type,
+            Identifier,
             self.content[self.start..self.current].to_string(),
         );
     }
@@ -265,7 +270,7 @@ mod test {
     #[test]
     fn test_lexer_1() {
         let source = "* This is a comment\n.end\n";
-        let mut lexer = Lexer::new(source.into());
+        let lexer = Lexer::new(source.into());
         match lexer.scan_tokens() {
             Ok(tokens) => {
                 dbg!(&tokens);
@@ -274,42 +279,57 @@ mod test {
             }
             Err(errors) => {
                 errors.report_errors();
-                assert!(false);
+                panic!();
+            }
+        }
+    }
+
+    #[test]
+    fn test_pure_comment() {
+        let source = "* This is a comment\n";
+        let lexer = Lexer::new(source.into());
+        match lexer.scan_tokens() {
+            Ok(tokens) => {
+                dbg!(&tokens);
+                assert_eq!(tokens.len(), 1);
+            }
+            Err(errors) => {
+                errors.report_errors();
+                panic!();
             }
         }
     }
 
     #[test]
     fn test_lexer_2() {
-        ///R1 R1_1 R1_2 13.12e6m;This is a comment
+        // R1 R1_1 R1_2 13.12e6m;This is a comment
         // V1 R1_1 GND 1
         // .wave V(XSC1_A) V(XSC1_B)
         // .end
         let source = "R1 R1_1 R1_2 13.12e6m;This is a comment\nV1 R1_1 GND 1 \n.wave V(XSC1_A) V(XSC1_B)\n.end\n";
-        let mut lexer = Lexer::new(source.into());
+        let lexer = Lexer::new(source.into());
         let result = lexer.scan_tokens();
         match result {
             Ok(tokens) => {
                 dbg!(&tokens);
-                assert_eq!(tokens.len(), 19 + 1);
+                assert_eq!(tokens.len(), 22);
             }
             Err(errors) => {
                 errors.report_errors();
-                assert!(false);
+                panic!("Error");
             }
         }
     }
 
     #[test]
     fn test_lexer_3() {
-        ///** Sheet_1 **
+        // ** Sheet_1 **
         // R1 R1_1 R1_2 1K
         // C1 C1_1 R1_2 1SADF; incorrect unit will be lexed as normal unit and ignored by the parser
         // L2 GND C1_1 1M
         // XSC1 C1_1 GND GND GND R1_1 GND XSC1_A XSC1_B OSCILLOSCOPE
         // V1 R1_1 GND 1
-        // .Save V(XSC1_A) V(XSC1_B)
-        //
+        // .wave V(XSC1_A) V(XSC1_B)
         // .SUBCKT  OSCILLOSCOPE 1  2  3 4 5 6 7 8
         // B1 7 GND V=V(1,2)
         // B2 8 GND V=V(3,4)
@@ -333,8 +353,8 @@ mod test {
 
     #[test]
     fn test_number() {
-        let source = "1.2E3.4m";
-        let mut lexer = Lexer::new(source.into());
+        let source = "-1.2E+3.4m";
+        let lexer = Lexer::new(source.into());
         let result = lexer.scan_tokens();
         dbg(&result.unwrap());
     }

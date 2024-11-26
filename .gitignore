@@ -1,5 +1,9 @@
 /target
 
+# Playground to try code snippets
+examples/playground.rs
+examples/*
+
 # Rust build artifacts
 target
 crates/**/target

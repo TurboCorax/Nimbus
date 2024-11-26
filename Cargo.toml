@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 bevy = "0.14.2"
 bevy_egui = "0.30.1"
+bevy_infinite_grid = { git = "https://github.com/ForesightMiningSoftwareCorporation/bevy_infinite_grid", branch = "main" }
 
 [workspace]
 resolver = "2"
@@ -13,13 +14,3 @@ members = [
     "nim_spice",
     "nim_ui",
 ]
-
-# How to scale the UI made with bevy_egui
-[[example]]
-name = "bevy_egui_scaling"
-path = "examples/bevy_basic/bevy_egui_scaling.rs"
-
-# Trigger low power mod (for desktop app)
-[[example]]
-name = "bevy_low_power_mode"
-path = "examples/bevy_basic/bevy_low_power_mode.rs"
