@@ -11,6 +11,6 @@ bevy_infinite_grid = { git = "https://github.com/ForesightMiningSoftwareCorporat
 [workspace]
 resolver = "2"
 members = [
-    "nim_spice",
-    "nim_ui",
+    "crates/nim_spice",
+    "crates/nim_ui",
 ]

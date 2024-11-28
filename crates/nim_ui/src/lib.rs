@@ -1,4 +1,5 @@
 pub mod breadboard;
+mod canvas;
 mod grid;
 pub mod main_panel;
 pub mod schematic;
