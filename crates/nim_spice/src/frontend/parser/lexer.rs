@@ -8,7 +8,7 @@ pub struct Lexer {
     current: usize,
     line: usize,
     column: usize,
-    tokens: Vec<Token>,
+    tokens: Vec<Card>,
     error_handler: ErrorHandler,
 }
 
@@ -40,21 +40,19 @@ impl Lexer {
         self.content.chars().nth(self.current - 1).unwrap()
     }
 
-    pub(crate) fn scan_tokens(mut self) -> Result<Vec<Token>, ErrorHandler> {
+    pub(crate) fn scan_tokens(mut self) -> Result<Vec<Card>, ErrorHandler> {
         while !self.is_eof() {
             self.scan_token();
-            // if self.tokens.last().unwrap().token_type == TokenType::End {
-            //     break;
-            // }
+
             if let Some(Token {
-                token_type: TokenType::End,
-                ..
-            }) = self.tokens.last()
+                            token_type: End,
+                            ..
+                        }) = self.tokens.last()
             {
                 break;
             }
         }
-        self.add_token(TokenType::Eof, String::new());
+        self.add_token(Eof, String::new());
 
         if !self.error_handler.has_errors() {
             Ok(self.tokens)
@@ -70,15 +68,15 @@ impl Lexer {
                     self.advance();
                 }
             }
-            '-' => self.add_token(TokenType::Minus, "-".to_string()),
-            '+' => self.add_token(TokenType::Add, "+".to_string()),
-            '(' => self.add_token(TokenType::LParen, "(".to_string()),
-            ')' => self.add_token(TokenType::RParen, ")".to_string()),
-            '{' => self.add_token(TokenType::LBrace, "{".to_string()),
-            '}' => self.add_token(TokenType::RBrace, "}".to_string()),
-            '=' => self.add_token(TokenType::Equal, "=".to_string()),
+            '-' => self.add_token(Minus, "-".to_string()),
+            '+' => self.add_token(Add, "+".to_string()),
+            '(' => self.add_token(LParen, "(".to_string()),
+            ')' => self.add_token(RParen, ")".to_string()),
+            '{' => self.add_token(LBrace, "{".to_string()),
+            '}' => self.add_token(RBrace, "}".to_string()),
+            '=' => self.add_token(Equal, "=".to_string()),
             '.' => self.command(),
-            ',' => self.add_token(TokenType::Comma, ",".to_string()),
+            ',' => self.add_token(Comma, ",".to_string()),
             ' ' | '\r' | '\t' => {}
             '\n' => {
                 self.line += 1;
@@ -108,7 +106,8 @@ impl Lexer {
     }
 
     fn last_token(&self) -> Option<Token> {
-        self.tokens.last().cloned()
+        // self.tokens?.last().cloned()
+        self.tokens.last()?.last()?.cloned()
     }
 
     fn peek_next(&self) -> char {
@@ -117,7 +116,21 @@ impl Lexer {
 
     fn add_token(&mut self, token_type: TokenType, content: String) {
         let token: Token = Token::new(token_type, self.line, self.column, content);
-        self.tokens.push(token);
+        if let Some(card) = self.tokens.last_mut() {
+            // existing card must have at least one token
+            match card.tokens.last() {
+                Some(t)=>{
+                    if t.line<token.line{
+                        self.tokens.push(Card { tokens: vec![token] });
+                    }
+                }
+                None=>{
+                    card.tokens.push(token);
+                }
+            }
+        } else {
+            self.tokens.push(Card { tokens: vec![token] });
+        }
     }
 
     fn is_digit(&self, c: char) -> bool {
@@ -157,7 +170,7 @@ impl Lexer {
         }
 
         self.add_token(
-            TokenType::Number,
+            Number,
             self.content[self.start - 1..self.current].to_string(),
         );
 
@@ -165,16 +178,16 @@ impl Lexer {
         if let Some(c) = self.peek() {
             if self.is_alpha(c) && self.peek() == Some('e') && self.peek() == Some('E') {
                 self.advance();
-                self.add_token(TokenType::E, "E".to_string());
+                self.add_token(E, "E".to_string());
 
                 match self.peek() {
                     Some('-') => {
                         self.advance();
-                        self.add_token(TokenType::Minus, "-".to_string());
+                        self.add_token(Minus, "-".to_string());
                     }
                     Some('+') => {
                         self.advance();
-                        self.add_token(TokenType::Add, "+".to_string());
+                        self.add_token(Add, "+".to_string());
                     }
                     _ => {}
                 }
@@ -182,7 +195,7 @@ impl Lexer {
                 consume_simple_number(self);
 
                 self.add_token(
-                    TokenType::Number,
+                    Number,
                     self.content[self.start - 1..self.current].to_string(),
                 );
             }
@@ -204,13 +217,13 @@ impl Lexer {
             "E" | "e" => {
                 // if E/e is just after a number, then it is an exponent
                 if let Some(Token {
-                    token_type: TokenType::Number,
-                    ..
-                }) = self.last_token()
+                                token_type: Number,
+                                ..
+                            }) = self.last_token()
                 {
                     let last = self.last(2);
                     if last.is_some() && last.unwrap().is_digit(10) {
-                        self.add_token(TokenType::E, "E".to_string());
+                        self.add_token(E, "E".to_string());
                         return;
                     }
                 }
@@ -243,15 +256,15 @@ impl Lexer {
         }
         let command = self.content[self.start..self.current].to_lowercase();
         match command.as_str() {
-            ".end" => self.add_token(TokenType::End, command),
-            ".ends" => self.add_token(TokenType::Ends, command),
-            ".tran" => self.add_token(TokenType::Tran, command),
-            ".dc" => self.add_token(TokenType::Dc, command),
-            ".ac" => self.add_token(TokenType::Ac, command),
-            ".op" => self.add_token(TokenType::Op, command),
-            ".subckt" => self.add_token(TokenType::Subckt, command),
-            ".plot" => self.add_token(TokenType::Plot, command),
-            ".wave" => self.add_token(TokenType::Wave, command),
+            ".end" => self.add_token(End, command),
+            ".ends" => self.add_token(Ends, command),
+            ".tran" => self.add_token(Tran, command),
+            ".dc" => self.add_token(Dc, command),
+            ".ac" => self.add_token(Ac, command),
+            ".op" => self.add_token(Op, command),
+            ".subckt" => self.add_token(Subckt, command),
+            ".plot" => self.add_token(Plot, command),
+            ".wave" => self.add_token(Wave, command),
             c => self.error_handler.add_error(Error::new(
                 ErrorType::Lexical,
                 format!("Unexpected command: {}", c),
@@ -260,6 +273,11 @@ impl Lexer {
             )),
         }
     }
+}
+
+#[derive(Debug)]
+pub struct Card {
+    pub tokens: Vec<Token>,
 }
 
 #[cfg(test)]
@@ -275,7 +293,7 @@ mod test {
             Ok(tokens) => {
                 dbg!(&tokens);
                 assert_eq!(tokens.len(), 1 + 1);
-                assert_eq!(tokens[0].token_type, TokenType::End);
+                assert_eq!(tokens[0][0].token_type, End);
             }
             Err(errors) => {
                 errors.report_errors();

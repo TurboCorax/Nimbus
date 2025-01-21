@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bevy = "0.14.2"
-bevy_egui = "0.30.1"
+bevy = "0.15.0"
+bevy_egui = "0.31.1"
 
 [lib]
 name = "nim_spice"

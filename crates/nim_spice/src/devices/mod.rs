@@ -1,2 +1,1 @@
-mod generic;
-mod circuit;
+mod res;

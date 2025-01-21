@@ -1,14 +1,19 @@
+use crate::circuit::Circuit;
+use crate::frontend::parser::lexer::Card;
 use crate::frontend::parser::netlist::Netlist;
 use crate::frontend::parser::token::Token;
 use crate::frontend::parser::token::TokenType;
+use crate::frontend::parser::token::TokenType::Number;
+use crate::frontend::parser::sym_table::SymTable;
 use crate::utils::error::{Error, ErrorHandler, ErrorType};
 
 static UNITS: [&str; 9] = ["T", "G", "MEG", "K", "M", "U", "N", "P", "F"];
 
 struct Parser {
-    tokens: Vec<Token>,
+    tokens: Vec<Card>,
     last_line: usize, // Line number of the last advanced token
     current: usize,
+    current_card: usize,
     error_handler: ErrorHandler,
 }
 
@@ -18,13 +23,14 @@ impl Default for Parser {
             tokens: vec![],
             last_line: 0,
             current: 0,
+            current_card: 0,
             error_handler: ErrorHandler::new(),
         }
     }
 }
 
 impl Parser {
-    pub fn new(tokens: Vec<Token>) -> Self {
+    pub fn new(tokens: Vec<Card>) -> Self {
         Parser {
             tokens,
             ..Self::default()
@@ -32,169 +38,39 @@ impl Parser {
     }
 
     pub fn parse(&mut self) -> Netlist {
-        let mut net = Netlist::new();
+        let mut circuit = Circuit::new();
+        let mut sym_table = SymTable::new();
+
+        // TODO: find ground node and add it to the circuit
 
         while !self.is_eof() {
-            let token = self.advance();
-            let pre = token.content.chars().nth(0);
-            /*
-            Leading Character - Type of line
+            let token = self.peek();
+            let pre = token.content.chars().nth(0).unwrap();
 
-            * Comment  // No need to parse
-            A: Special function device
-            B: Arbitrary behavioral source
-            C: Capacitor
-            D: Diode
-            E: Voltage dependent voltage source
-            F: Current dependent current source
-            G: Voltage dependent current source
-            H: Current dependent voltage source
-            I: Independent current source
-            J: JFET transistor
-            K: Mutual inductance
-            L: Inductor
-            M: MOSFET transistor
-            O: Lossy transmission line
-            Q: Bipolar transistor
-            R: Resistor
-            S: Voltage controlled switch
-            T: Lossless transmission line
-            U: Uniform RC-line
-            V: Independent voltage source
-            W: Current controlled switch
-            X: Subcircuit Invocation
-            Z: MESFET transistor
-            .: A simulation directive, For example: .options reltol=1e-4
-            +: A continuation of the previous line. The "+" is removed and the remainder of the line is considered part of the prior line.
-             */
-            if let None = pre {
-                todo!();
-                return net;
-            }
-
-            match pre.unwrap() {
-                'A' => {
-                    // Special function device
-                    self.special_function_device();
-                }
-                'B' => {
-                    // Arbitrary behavioral source
-                    self.arbitrary_behavioral_source();
-                }
-                'C' => {
-                    // Capacitor
-                    self.capacitor();
-                }
-                'D' => {
-                    // Diode
-                    self.diode();
-                }
-                'E' => {
-                    // Voltage dependent voltage source
-                    self.voltage_dependent_voltage_source();
-                }
-                'F' => {
-                    // Current dependent current source
-                    self.current_dependent_current_source();
-                }
-                'G' => {
-                    // Voltage dependent current source
-                    self.voltage_dependent_current_source();
-                }
-                'H' => {
-                    // Current dependent voltage source
-                    self.current_dependent_voltage_source();
-                }
-                'I' => {
-                    // Independent current source
-                    self.independent_current_source();
-                }
-                'J' => {
-                    // JFET transistor
-                    self.jfet_transistor();
-                }
-                'K' => {
-                    // Mutual inductance
-                    self.mutual_inductance();
-                }
-                'L' => {
-                    // Inductor
-                    self.inductor();
-                }
-                'M' => {
-                    // MOSFET transistor
-                    self.mosfet_transistor();
-                }
-                'O' => {
-                    // Lossy transmission line
-                    self.lossy_transmission_line();
-                }
-                'Q' => {
-                    // Bipolar transistor
-                    self.bipolar_transistor();
-                }
-                'R' => {
-                    // Resistor
-                    self.resistor();
-                }
-                'S' => {
-                    // Voltage controlled switch
-                    self.voltage_controlled_switch();
-                }
-                'T' => {
-                    // Lossless transmission line
-                    self.lossless_transmission_line();
-                }
-                'U' => {
-                    // Uniform RC-line
-                    self.uniform_rc_line();
-                }
-                'V' => {
-                    // Independent voltage source
-                    self.independent_voltage_source();
-                }
-                'W' => {
-                    // Current controlled switch
-                    self.current_controlled_switch();
-                }
-                'X' => {
-                    // Subcircuit Invocation
-                    self.subcircuit_invocation();
-                }
-                'Z' => {
-                    // MESFET transistor
-                    self.mesfet_transistor();
-                }
-                '.' => {
-                    // Simulation directive
-                    self.simulation_directive();
-                }
-                '+' => {
-                    // Continuation of the previous line
-                    self.continuation_of_the_previous_line();
-                }
-                ' ' => {
-                    // Empty line
-                    continue;
-                }
+            match pre {
+                'R' => self.parse_resistor(&mut circuit, &mut sym_table),
+                'C' => self.parse_capacitor(&mut circuit, &mut sym_table),
+                'L' => self.parse_inductor(&mut circuit, &mut sym_table),
                 _ => {
                     // Unknown
                     self.error_handler.add_error(Error::new(
                         ErrorType::Syntax,
-                        format!("Unknown leading character: {}", pre.unwrap()),
+                        format!("Unknown leading character: {}", pre),
                         token.line,
                         token.column,
                     ));
                 }
             }
+
+            self.current_card += 1;
         }
-        net
+        todo!()
     }
 
     pub fn parse_num(&mut self) -> f64 {
         let mut token = self.advance();
         let mut n: f64 = match token.token_type {
-            TokenType::Number => token.content.parse().unwrap(),
+            Number => token.content.parse().unwrap(),
             t => {
                 self.error_handler.add_error(Error::new(
                     ErrorType::Syntax,
@@ -214,7 +90,7 @@ impl Parser {
         {
             self.advance(); // consume E
             let mut num = self.advance();
-            if TokenType::Number == num.token_type {
+            if Number == num.token_type {
                 let exp: f64 = num.content.parse().unwrap();
                 n *= 10_f64.powf(exp);
             } else {
@@ -258,21 +134,31 @@ impl Parser {
         n
     }
 
-    fn advance(&mut self) -> Token {
+    fn advance(&mut self) ->Token {
+        let token= self.tokens[self.current_card].tokens[self.current].clone();
         self.current += 1;
-        self.tokens[self.current - 1].clone()
+        if self.is_at_end() {
+            self.current_card += 1;
+            self.current = 0;
+        }
+        token
+    }
+
+    fn is_at_end(&self) -> bool {
+        // eof
+        self.tokens[self.current_card].tokens.len() == self.current
     }
 
     fn peek(&self) -> Token {
-        self.tokens[self.current].clone()
+        self.tokens[self.current_card].tokens[self.current].clone()
     }
 
     fn next(&self) -> Token {
-        self.tokens[self.current + 1].clone()
+        self.tokens[self.current_card].tokens[self.current + 1].clone()
     }
 
-    fn matches(&mut self, token_type: TokenType) -> bool {
-        if self.tokens[self.current].token_type == token_type {
+    fn matches(&mut self, token_type: Vec<TokenType>) -> bool {
+        if token_type.contains(&self.tokens[self.current_card].tokens[self.current].token_type) {
             self.advance();
             true
         } else {
@@ -281,106 +167,25 @@ impl Parser {
     }
 
     fn is_eof(&self) -> bool {
-        self.tokens[self.current].token_type == TokenType::Eof
+        self.tokens[self.current_card].tokens[self.current].token_type == TokenType::Eof
     }
 
-    fn special_function_device(&mut self) {
+    fn parse_resistor(&mut self, circuit: &mut Circuit, sym_table: &mut SymTable) {
+        let name = self.advance();
+        
+        // two nodes
+        let node1 = self.advance();
+        let node2 = self.advance();
+        
         todo!()
     }
 
-    fn arbitrary_behavioral_source(&mut self) {
+    fn parse_capacitor(&mut self, circuit: &mut Circuit, sym_table: &mut SymTable) {
         todo!()
     }
 
-    fn capacitor(&mut self) {
-        todo!()
-    }
-
-    fn diode(&mut self) {
-        todo!()
-    }
-
-    fn voltage_dependent_voltage_source(&mut self) {
-        todo!()
-    }
-
-    fn current_dependent_current_source(&mut self) {
-        todo!()
-    }
-
-    fn voltage_dependent_current_source(&mut self) {
-        todo!()
-    }
-
-    fn current_dependent_voltage_source(&mut self) {
-        todo!()
-    }
-
-    fn independent_current_source(&mut self) {
-        todo!()
-    }
-
-    fn jfet_transistor(&mut self) {
-        todo!()
-    }
-
-    fn mutual_inductance(&mut self) {
-        todo!()
-    }
-
-    fn inductor(&mut self) {
-        todo!()
-    }
-
-    fn mosfet_transistor(&mut self) {
-        todo!()
-    }
-
-    fn lossy_transmission_line(&mut self) {
-        todo!()
-    }
-
-    fn bipolar_transistor(&mut self) {
-        todo!()
-    }
-
-    fn resistor(&mut self) {
-        todo!()
-    }
-
-    fn voltage_controlled_switch(&mut self) {
-        todo!()
-    }
-
-    fn lossless_transmission_line(&mut self) {
-        todo!()
-    }
-
-    fn uniform_rc_line(&mut self) {
-        todo!()
-    }
-
-    fn independent_voltage_source(&mut self) {
-        todo!()
-    }
-
-    fn current_controlled_switch(&mut self) {
-        todo!()
-    }
-
-    fn subcircuit_invocation(&mut self) {
-        todo!()
-    }
-
-    fn mesfet_transistor(&mut self) {
-        todo!()
-    }
-
-    fn simulation_directive(&mut self) {
-        todo!()
-    }
-
-    fn continuation_of_the_previous_line(&mut self) {
+    fn parse_inductor(&mut self, circuit: &mut Circuit, sym_table: &mut SymTable) {
         todo!()
     }
 }
+
